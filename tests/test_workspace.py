@@ -102,9 +102,50 @@ class RuntimeTests(unittest.TestCase):
         target = self.root / "hello.txt"
         target.write_bytes(b"one\r\ntwo\r\n")
         result = self.runtime.tool_read_file("hello.txt", 2, 2)
-        self.assertEqual(result["revision"], revision(target.read_bytes()))
-        self.assertEqual(result["newline"], "crlf")
-        self.assertIn("2 | two", result["content"])
+        self.assertIn(f"REVISION: {revision(target.read_bytes())}", result)
+        self.assertIn("NEWLINE: crlf", result)
+        self.assertIn("2 | two", result)
+        self.assertNotIn('"content"', result)
+
+    def test_batch_read_formats_multiple_files(self) -> None:
+        (self.root / "one.txt").write_text("alpha\n", encoding="utf-8")
+        (self.root / "two.txt").write_text("beta\n", encoding="utf-8")
+        result = self.runtime.tool_batch_read([
+            {"tool": "read_file", "arguments": {"path": "one.txt"}},
+            {"tool": "read_file", "arguments": {"path": "two.txt"}},
+        ])
+        self.assertIn("=== 1/2 read_file [one.txt] ===", result)
+        self.assertIn("=== 2/2 read_file [two.txt] ===", result)
+        self.assertIn("alpha", result)
+        self.assertIn("beta", result)
+
+    def test_create_directory_with_parents(self) -> None:
+        result = self.runtime.tool_create_directory("src/generated/nested")
+        self.assertTrue(result["created"])
+        self.assertTrue((self.root / "src" / "generated" / "nested").is_dir())
+
+    def test_delete_file_requires_current_revision(self) -> None:
+        target = self.root / "delete-me.txt"
+        target.write_text("remove me\n", encoding="utf-8")
+        rev = revision(target.read_bytes())
+        with self.assertRaises(ToolError):
+            self.runtime.tool_delete_file("delete-me.txt", "sha256:stale")
+        self.assertTrue(target.exists())
+        result = self.runtime.tool_delete_file("delete-me.txt", rev)
+        self.assertEqual(result, {"deleted": "delete-me.txt", "permanent": True})
+        self.assertFalse(target.exists())
+
+    def test_delete_file_does_not_follow_symlinks_when_supported(self) -> None:
+        target = self.root / "target.txt"
+        target.write_text("keep me", encoding="utf-8")
+        link = self.root / "link.txt"
+        try:
+            link.symlink_to(target)
+        except OSError:
+            self.skipTest("symlinks require additional privileges on this platform")
+        with self.assertRaises(WorkspaceSecurityError):
+            self.runtime.tool_delete_file("link.txt", revision(target.read_bytes()))
+        self.assertTrue(target.exists())
 
     def test_replace_lines_requires_current_revision_and_preserves_crlf(self) -> None:
         target = self.root / "hello.txt"
@@ -178,6 +219,13 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsNotNone(details)
         self.assertEqual(details["risk"], "command")
         self.assertEqual(details["command"], "python -V")
+
+    def test_delete_file_requires_approval_metadata(self) -> None:
+        details = self.runtime.approval_details(
+            "delete_file", {"path": "x.txt", "expected_revision": "sha256:test"}
+        )
+        self.assertIsNotNone(details)
+        self.assertEqual(details["risk"], "destructive")
 
     def test_disabled_runner_refuses_direct_execution(self) -> None:
         with self.assertRaises(ToolError):

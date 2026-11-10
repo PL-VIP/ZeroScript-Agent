@@ -691,16 +691,9 @@
           return { kind: "parse_error", reason: "malformed", raw: r, item: d.item };
         }
       }
-      // The model answered in its OWN native tool-call markup instead of a
-      // ZeroScript command - DeepSeek's DSML invoke/parameter tags (reported by
-      // users, 2026-08; DeepSeek is the only provider seen doing it). It carries
-      // no "command"/"tool" key and no ###...### markers, so hasToolSignature is
-      // false and every guard below misses it too: the turn finalized as a
-      // plain-text answer, the tool never ran, and the loop ended on a dead agent.
-      // Checked FIRST among the fallthrough guards because the marker is
-      // unambiguous - unlike the guards below it needs no known-tool gate, which
-      // matters because the degenerate form seen in the wild carries no tool name
-      // at all (a bare tool_calls opener followed by prose).
+      // Valid DeepSeek DSML is translated above. A marker reaching this branch is
+      // malformed, incomplete without a detectable opener, or names an unsupported
+      // native call, so request a clean retry instead of ending on a dead turn.
       if (ZSParse.DSML_RE.test(r)) {
         diag("cmd.dsml", { len: r.length });
         return { kind: "parse_error", reason: "dsml", raw: r, item: d.item };
@@ -2381,8 +2374,8 @@
           neverRun && item === P.lastAssistant() && Date.now() - A.lastGenAt <= RESUME_FRESH_MS;
         let phase = stopped ? "err" : (orphanPending ? "idle" : ((live || pendingExec) ? "run" : "done"));
         let detail = stopped ? "stopped" : (orphanPending ? "not run" : "");
-        // A DSML turn is the model calling a tool in its OWN markup, which can
-        // never be executed - it always resolves to the "dsml" parse_error. So
+        // A malformed DSML turn that still cannot be translated to workspace
+        // calls resolves to a parse error. Valid DSML is accepted since 2.1.
         // once it has FINISHED streaming, "waiting to run" (spinner) and "not
         // run" (grey) are both wrong: it is not pending, it is already decided.
         // Left alone it inherited pendingExec and span for the whole
@@ -2394,7 +2387,8 @@
         // moment generation ends. When our error result lands below, the
         // error-aware settle just below is skipped (phase is no longer "done") so
         // the more precise "bad format" wording survives.
-        if (!stopped && !live && phase !== "err" && ZSParse.DSML_RE.test(txt)) {
+        if (!stopped && !live && phase !== "err" && ZSParse.DSML_RE.test(txt) &&
+            !ZSParse.parseToolCalls(txt).length) {
           phase = "err"; detail = "wrong format";
         }
         // Error-aware settle: a command whose injected result RIGHT BELOW is an
@@ -2805,12 +2799,12 @@
          </section>
          <section class="zs-menu-sec">
            <div class="zs-sec-label"><span>MCP servers</span></div>
-           <div class="zs-menu-note">The selected local workspace is the primary sandbox. External MCP server management is temporarily unavailable in Workspace Agent 2.0.</div>
+           <div class="zs-menu-note">The selected local workspace is the primary sandbox. External MCP server management is temporarily unavailable in Workspace Agent 2.1.</div>
            ${mcpList}
            <div class="zs-mcp-sep"></div>
            <input id="zs-mcp-name" class="zs-mcp-field" placeholder="External MCP addons are unavailable" disabled />
            <input id="zs-mcp-url" class="zs-mcp-field" placeholder="Workspace tools are active" disabled />
-           <div class="zs-set-row"><button id="zs-mcp-add" disabled>Unavailable in 2.0</button><span id="zs-mcp-status"></span></div>
+           <div class="zs-set-row"><button id="zs-mcp-add" disabled>Unavailable in 2.1</button><span id="zs-mcp-status"></span></div>
          </section>`;
       const open = (url) => { try { window.open(url, "_blank", "noopener"); } catch {} menuEl.hidden = true; };
       menuEl.querySelectorAll("button.zs-site-opt, .zs-tip-opt").forEach((b) =>

@@ -255,7 +255,7 @@ class Gateway:
                 elif mtype == "restart_mcp":
                     await self._send(ws, {"type": "mcp_status", "id": rid, "ok": True, "alive": True, **self.status()})
                 elif mtype in {"add_server", "remove_server"}:
-                    await self._send(ws, {"type": "server_changed", "id": rid, "ok": False, "error": "external MCP server management is not available in Workspace Agent 2.0"})
+                    await self._send(ws, {"type": "server_changed", "id": rid, "ok": False, "error": "external MCP server management is not available in Workspace Agent 2.1"})
                 else:
                     await self._send(ws, {"type": "error", "id": rid, "error": f"unknown message type: {mtype}"})
         except websockets.ConnectionClosed:

@@ -10,11 +10,11 @@ const ZS = (() => {
 
   function toolCategory(name) {
     const n = String(name || "").split("/").pop();
-    if (/^(workspace_info|list_files|read_file|stat_path|list_commands|list_tools)$/.test(n)) return "read";
+    if (/^(workspace_info|list_files|read_file|batch_read|stat_path|list_commands|list_tools)$/.test(n)) return "read";
     if (/^search_/.test(n)) return "search";
     if (/^git_/.test(n)) return "git";
-    if (/^(apply_patch|replace_lines|move_path)$/.test(n)) return "edit";
-    if (/^(trash_path)$/.test(n)) return "danger";
+    if (/^(apply_patch|replace_lines|move_path|create_directory)$/.test(n)) return "edit";
+    if (/^(trash_path|delete_file)$/.test(n)) return "danger";
     if (/^(run_command|get_command_output|stop_command)$/.test(n)) return "run";
     return "tool";
   }
@@ -31,7 +31,7 @@ const ZS = (() => {
         toolKey:
           'ERROR: use the exact "command" key and put every argument inside "params".',
         dsml:
-          'ERROR: native/internal tool-call markup is not supported here. Write a plain ZeroScript JSON command instead.',
+          'ERROR: the DSML tool block was malformed or used an unsupported call. Close every invoke/parameter tag, or rewrite it as one plain ZeroScript JSON command.',
       };
       return `${notes[reason] || notes.malformed}${toolName && toolName !== "command" ? ` Command: ${toolName}.` : ""} Please retry.`;
     },
@@ -94,7 +94,7 @@ WORKFLOW
 - Preserve unrelated user changes. Never reset, checkout, clean, commit, push, or rewrite Git history unless a future explicit tool supports it and the user asks.
 - Check git_diff after meaningful edits. Run tests only when useful for the requested task.
 - run_command never runs automatically. Every single invocation opens a local approval dialog showing the exact command, cwd, runner and network request. The user's approval is one-time only. If denied, respect it and continue without retrying the same command.
-- move_path and trash_path also require local approval. Never delete broadly; inspect the exact target first.
+- move_path, trash_path and delete_file also require local approval. delete_file is permanent and requires the exact current revision. Never delete broadly; inspect the exact target first.
 - Never claim a file changed or a test passed without a successful tool result.
 - Final answers are concise plain text: state files changed, verification performed, and any limitation.
 
@@ -109,6 +109,8 @@ ${providerNotes ? `PROVIDER NOTES\n${providerNotes}\n` : ""}${customPrompt ? `US
     replace_lines: "Line numbers are 1-based and inclusive; expected_revision is mandatory.",
     run_command: "Every call requires a fresh local approval. Use argv, never a shell command string.",
     trash_path: "Moves to recoverable app trash and requires local approval.",
+    delete_file: "Permanently deletes one file, requires its exact revision and fresh local approval.",
+    create_directory: "Creates a directory inside the workspace; parents defaults to true.",
   };
 
   function toolsReminder(tools) {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0 — DSML reads and filesystem operations
+
+- Parse DeepSeek's ASCII and full-width DSML invoke/parameter syntax as real workspace calls instead of rejecting it as internal markup.
+- Group multiple DSML read-only calls into a bounded `batch_read` operation.
+- Return `read_file` output as readable line-oriented text instead of JSON containing escaped newlines.
+- Add explicit `create_directory` with parent-directory support.
+- Add revision-checked permanent `delete_file`; every invocation requires fresh local approval.
+- Add tests for the reported DSML shape, including the malformed parameter closer seen in live output.
+
 ## 2.0.0 — Workspace Agent
 
 - Replaced the mandatory Roblox Studio runtime with a user-selected local workspace sandbox.

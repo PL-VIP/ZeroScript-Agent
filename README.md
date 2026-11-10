@@ -2,7 +2,7 @@
 
 ZeroScript Workspace Agent turns a supported browser AI chat into a local coding agent. The model can inspect, search and edit one user-selected project directory through a local bridge, without receiving general access to the computer.
 
-The project is a fork of ZeroScript Free. Version 2.0 replaces the mandatory Roblox Studio backend with a filesystem workspace sandbox.
+The project is a fork of ZeroScript Free. Version 2.1 uses a filesystem workspace sandbox instead of the mandatory Roblox Studio backend.
 
 ## What it can do
 
@@ -105,7 +105,7 @@ python agent_bridge.py
 
 The user can choose only **OK for this invocation** or **Cancel**. Approval is tied to the exact workspace, command arguments and request token. It expires after 60 seconds, is removed when the socket disconnects and cannot be reused. An identical later command requires another approval.
 
-`move_path` and `trash_path` use the same local approval mechanism.
+`move_path`, `trash_path` and permanent `delete_file` use the same local approval mechanism. `delete_file` additionally requires the exact current file revision.
 
 ## Command runner modes
 
@@ -183,6 +183,7 @@ Patch and file contents are redacted from audit argument records.
 | `workspace_info` | Workspace and runtime capabilities | No |
 | `list_files` | Bounded directory listing | No |
 | `read_file` | Line-range read plus revision | No |
+| `batch_read` | Up to 10 safe read-only calls, including translated DSML | No |
 | `search_files` | Glob-based file search | No |
 | `search_text` | Literal text search | No |
 | `stat_path` | File/directory metadata | No |
@@ -191,14 +192,16 @@ Patch and file contents are redacted from audit argument records.
 | `apply_patch` | Transactional unified diff | No |
 | `replace_lines` | Revision-checked line replacement | No |
 | `move_path` | Move inside workspace | Every call |
+| `create_directory` | Create a directory and optional parents | No |
+| `delete_file` | Permanently delete one revision-checked file | Every call |
 | `trash_path` | Recoverable removal | Every call |
 | `run_command` | Host or Docker command | Every call |
 
-`apply_patch` does not delete files. Deletion must go through `trash_path`, which is recoverable and requires approval.
+`apply_patch` does not delete files. Prefer recoverable `trash_path`; use `delete_file` only for deliberate permanent deletion. Both require approval.
 
 ## Editing guarantees
 
-- `read_file` returns a SHA-256 revision.
+- `read_file` returns readable numbered lines and a SHA-256 revision without JSON-escaped newlines.
 - `replace_lines` refuses stale revisions.
 - `apply_patch` validates every hunk before writing any file.
 - multi-file patches roll back if a write fails;
@@ -236,7 +239,7 @@ node --check zeroscript-extension/background.js
 
 - Text tools support UTF-8 files. Other encodings and binary editing are intentionally rejected.
 - Host runner mode is approval-gated but not OS-isolated. Use Docker mode for stronger command isolation.
-- External MCP addon management from the extension is disabled in 2.0 while the workspace security model is stabilized.
+- External MCP addon management from the extension is disabled in 2.1 while the workspace security model is stabilized.
 - Browser-site DOM changes can require updates to individual provider adapters.
 
 ## License and attribution

@@ -28,3 +28,32 @@ ok("open patch detected", ZSParse.hasOpenToolBlock("###PATCH###\n--- a/a") === t
 ok("closed patch not open", ZSParse.hasOpenToolBlock("###PATCH###\nx\n###END_PATCH###") === false);
 ok("injected feedback", ZSParse.isInjectedFeedback("Output of 'read_file':\n{}") === true);
 ok("patch tool label", ZSParse.toolNameFromText("###PATCH###") === "apply_patch");
+
+const dsml = [
+  '<｜｜DSML｜｜ calls>',
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="path">src/lib/mod-jar-generator.ts</｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="start_line">90</｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="end_line">300</｜｜DSML｜｜ parameter>',
+  '</｜｜DSML｜｜ invoke>',
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="path">src/components/mod-submission-form.tsx</｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="start_line">1｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="end_line">60｜｜DSML｜｜ parameter>',
+  '</｜｜DSML｜｜ invoke>',
+  '</｜｜DSML｜｜ calls>',
+].join("\n");
+const dsmlCalls = ZSParse.parseToolCalls(dsml);
+ok("DSML is an executable signature", ZSParse.hasToolSignature(dsml) === true);
+ok("multiple DSML reads become batch_read", dsmlCalls.length === 1 && dsmlCalls[0].tool === "batch_read");
+ok("DSML paths parsed", dsmlCalls[0].arguments.calls[0].arguments.path === "src/lib/mod-jar-generator.ts");
+ok("DSML numeric parameters parsed", dsmlCalls[0].arguments.calls[0].arguments.start_line === 90);
+ok("malformed DSML parameter closer tolerated", dsmlCalls[0].arguments.calls[1].arguments.start_line === 1);
+ok("DSML tool label", ZSParse.toolNameFromText(dsml) === "read_file");
+
+const incompleteDsml = [
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="path">src/incomplete.ts</｜｜DSML｜｜ parameter>',
+].join("\n");
+ok("incomplete DSML waits for close", ZSParse.parseToolCalls(incompleteDsml).length === 0);
+ok("incomplete DSML is reported as open", ZSParse.hasOpenToolBlock(incompleteDsml) === true);

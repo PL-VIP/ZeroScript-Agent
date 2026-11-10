@@ -59,6 +59,25 @@ TOOLS = [
         }, ["path"]),
     },
     {
+        "name": "batch_read",
+        "description": "Run up to 10 read-only workspace calls and return clearly separated results. Used for multi-call DSML replies.",
+        "inputSchema": _schema({
+            "calls": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "tool": {"type": "string"},
+                        "arguments": {"type": "object"},
+                    },
+                    "required": ["tool"],
+                },
+            },
+        }, ["calls"]),
+    },
+    {
         "name": "search_files",
         "description": "Find workspace files by glob pattern.",
         "inputSchema": _schema({
@@ -125,6 +144,22 @@ TOOLS = [
             "destination": {"type": "string"},
             "expected_revision": {"type": "string"},
         }, ["source", "destination"]),
+    },
+    {
+        "name": "create_directory",
+        "description": "Create a workspace directory, optionally including missing parents.",
+        "inputSchema": _schema({
+            "path": {"type": "string"},
+            "parents": {"type": "boolean"},
+        }, ["path"]),
+    },
+    {
+        "name": "delete_file",
+        "description": "Permanently delete one exact file after revision verification and local user approval.",
+        "inputSchema": _schema({
+            "path": {"type": "string"},
+            "expected_revision": {"type": "string"},
+        }, ["path", "expected_revision"]),
     },
     {
         "name": "trash_path",
@@ -207,13 +242,17 @@ class WorkspaceRuntime:
                     "Polecenie zostanie uruchomione w skonfigurowanym kontenerze."
                 ),
             }
-        if name in {"trash_path", "move_path"}:
+        if name in {"trash_path", "move_path", "delete_file"}:
             return {
                 "title": "Zatwierdzić operację na plikach?",
-                "risk": "destructive" if name == "trash_path" else "move",
+                "risk": "destructive" if name in {"trash_path", "delete_file"} else "move",
                 "operation": name,
                 "arguments": args,
-                "warning": "Sprawdź dokładne ścieżki przed zatwierdzeniem.",
+                "warning": (
+                    "Ta operacja trwale usuwa plik. Sprawdź ścieżkę i revision przed zatwierdzeniem."
+                    if name == "delete_file" else
+                    "Sprawdź dokładne ścieżki przed zatwierdzeniem."
+                ),
             }
         return None
 
@@ -370,7 +409,7 @@ class WorkspaceRuntime:
         start_line: int | None = None,
         end_line: int | None = None,
         max_bytes: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> str:
         target = self.guard.resolve(path)
         data = self._read_bytes(target, max_bytes=max_bytes)
         text, bom = self._decode(data)
@@ -383,16 +422,44 @@ class WorkspaceRuntime:
         if total and start > total:
             raise ToolError(f"start_line {start} is outside the file, which has {total} lines")
         selected = lines[start - 1:end]
-        return {
-            "path": self.guard.relative(target),
-            "revision": revision(data),
-            "encoding": "utf-8-bom" if bom else "utf-8",
-            "newline": "crlf" if self._newline(data) == "\r\n" else "lf",
-            "total_lines": total,
-            "start_line": start,
-            "end_line": min(end, total),
-            "content": "\n".join(f"{start + i:>6} | {line}" for i, line in enumerate(selected)),
+        actual_end = min(end, total)
+        encoding = "utf-8-bom" if bom else "utf-8"
+        newline = "crlf" if self._newline(data) == "\r\n" else "lf"
+        numbered = "\n".join(f"{start + i:>6} | {line}" for i, line in enumerate(selected))
+        line_label = f"{start}-{actual_end} of {total}" if total else "empty file (0 lines)"
+        return (
+            f"FILE: {self.guard.relative(target)}\n"
+            f"REVISION: {revision(data)}\n"
+            f"ENCODING: {encoding}; NEWLINE: {newline}\n"
+            f"LINES: {line_label}\n"
+            f"---\n{numbered}"
+        ).rstrip()
+
+    def tool_batch_read(self, calls: list[dict[str, Any]]) -> str:
+        if not isinstance(calls, list) or not 1 <= len(calls) <= 10:
+            raise ToolError("batch_read requires between 1 and 10 calls")
+        allowed = {
+            "workspace_info", "list_files", "read_file", "search_files",
+            "search_text", "stat_path", "git_status", "git_diff",
         }
+        sections = []
+        for index, call in enumerate(calls, 1):
+            if not isinstance(call, dict):
+                raise ToolError(f"batch_read item {index} must be an object")
+            name = str(call.get("tool") or call.get("command") or "")
+            arguments = call.get("arguments")
+            if arguments is None:
+                arguments = call.get("params") or {}
+            if name not in allowed:
+                raise ToolError(f"batch_read only accepts read-only tools; item {index} requested {name!r}")
+            if not isinstance(arguments, dict):
+                raise ToolError(f"batch_read arguments for item {index} must be an object")
+            method = getattr(self, f"tool_{name}")
+            result = method(**arguments)
+            text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2)
+            label = arguments.get("path") or arguments.get("query") or ""
+            sections.append(f"=== {index}/{len(calls)} {name}{f' [{label}]' if label else ''} ===\n{text}")
+        return "\n\n".join(sections)
 
     def tool_search_files(self, pattern: str, path: str = ".", max_results: int = 200) -> dict[str, Any]:
         start = self.guard.resolve(path)
@@ -628,6 +695,33 @@ class WorkspaceRuntime:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
         return {"moved": self.guard.relative(src), "destination": self.guard.relative(dst)}
+
+    def tool_create_directory(self, path: str, parents: bool = True) -> dict[str, Any]:
+        target = self.guard.resolve(path, must_exist=False, allow_root=False)
+        rel = self.guard.relative(target)
+        if self.guard.is_excluded(rel) or self.guard.is_secret(rel):
+            raise ToolError(f"directory is blocked by workspace policy: {rel}")
+        if target.exists():
+            if not target.is_dir():
+                raise ToolError(f"a non-directory already exists at: {rel}")
+            return {"path": rel, "created": False, "message": "directory already exists"}
+        with self._mutation_lock:
+            target.mkdir(parents=bool(parents), exist_ok=False)
+        return {"path": rel, "created": True}
+
+    def tool_delete_file(self, path: str, expected_revision: str) -> dict[str, Any]:
+        self.guard.assert_no_link_components(path)
+        target = self.guard.resolve(path, allow_root=False)
+        self.guard.assert_readable(target)
+        if not target.is_file():
+            raise ToolError("delete_file only deletes one file; directories are not allowed")
+        with self._mutation_lock:
+            current = target.read_bytes()
+            if revision(current) != expected_revision:
+                raise ToolError("revision conflict: the file changed after it was inspected")
+            rel = self.guard.relative(target)
+            target.unlink()
+        return {"deleted": rel, "permanent": True}
 
     def tool_trash_path(self, path: str, expected_revision: str | None = None) -> dict[str, Any]:
         target = self.guard.resolve(path, allow_root=False)

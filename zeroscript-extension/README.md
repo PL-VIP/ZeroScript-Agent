@@ -34,7 +34,7 @@ background.js              resilient WebSocket connection to 127.0.0.1
 
 When the bridge returns `approval_required`, `core/main.js` displays the exact operation with `window.confirm`. The decision is sent through `background.js` as `approve_operation`. The bridge owns and validates the one-time token; the extension cannot broaden or reuse it.
 
-Every `run_command`, `move_path` and `trash_path` invocation requires a fresh decision.
+Every `run_command`, `move_path`, `trash_path` and `delete_file` invocation requires a fresh decision. Version 2.1 also translates DeepSeek DSML read calls into normal workspace calls.
 
 ## Smoke tests
 

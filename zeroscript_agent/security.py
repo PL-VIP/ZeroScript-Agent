@@ -122,6 +122,22 @@ class PathGuard:
             raise WorkspaceSecurityError("the workspace root cannot be modified")
         return resolved
 
+    def assert_no_link_components(self, raw: str) -> None:
+        """Reject an existing symlink or Windows junction in a lexical path.
+
+        This is required before destructive operations: ``Path.resolve`` follows
+        links, which could otherwise make deleting a link delete its target.
+        """
+        clean = self._validate_raw(raw)
+        current = self.root
+        for part in (() if clean == "." else clean.split("/")):
+            current = current / part
+            if current.is_symlink():
+                raise WorkspaceSecurityError("destructive operations cannot follow symbolic links")
+            is_junction = getattr(current, "is_junction", None)
+            if callable(is_junction) and is_junction():
+                raise WorkspaceSecurityError("destructive operations cannot follow Windows junctions")
+
     def relative(self, path: Path) -> str:
         return path.relative_to(self.root).as_posix() or "."
 

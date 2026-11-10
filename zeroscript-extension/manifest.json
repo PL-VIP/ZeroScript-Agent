@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ZeroScript Workspace Agent",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Turn supported AI chats into a local workspace agent that can safely read, edit and test project files.",
   "permissions": ["storage"],
   "host_permissions": [
