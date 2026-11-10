@@ -12,6 +12,9 @@ docs/
 probe.py
 logs/
 devtools/
+.agent-data/
+.zeroscript-trash/
+*.zs-tmp
 
 # System files
 .DS_Store

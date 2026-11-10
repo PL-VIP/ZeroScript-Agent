@@ -38,6 +38,9 @@ let serversCache = [];
 // true/false = a PLACE is loaded and usable in Roblox Studio; null = unknown.
 // The MCP process stays alive when Studio is closed or its MCP option is off,
 // so this is probed separately (bridge "studio_status").
+let workspaceReady = null;
+let workspaceName = "";
+let runnerReady = false;
 let studioConnected = null;
 // true/false = a Roblox Studio app is connected to the MCP server at all; null =
 // unknown. studioApp=true with studioConnected=false means "Studio open but no
@@ -93,6 +96,9 @@ function connect() {
   ws.onclose = () => {
     connected = false;
     mcpAlive = false;
+    workspaceReady = null;
+    workspaceName = "";
+    runnerReady = false;
     studioConnected = null;
     studioApp = null;
     studioProc = null;
@@ -129,7 +135,7 @@ function startHeartbeat() {
       }
       // Keeps the MV3 service worker alive AND detects a half-open socket.
       send({ type: "ping" }).catch(() => {});
-      refreshStudioStatus();
+      refreshWorkspaceStatus();
     }
   }, HEARTBEAT_MS);
 }
@@ -192,13 +198,14 @@ async function send(obj, timeout = REQUEST_TIMEOUT_DEFAULT) {
 // Ask the bridge whether a Roblox Studio instance is actually connected to the
 // MCP server. Broadcasts only on change so the UI updates promptly but quietly.
 let studioProbing = false;
-async function refreshStudioStatus() {
+async function refreshWorkspaceStatus() {
   if (studioProbing || !connected) return;
   studioProbing = true;
   try {
-    const r = await send({ type: "studio_status" }, 12000);
-    const v = r && r.ok && typeof r.studio === "boolean" ? r.studio : null;
-    if (v !== studioConnected) {
+    const r = await send({ type: "workspace_status" }, 12000);
+    const v = r && r.ok && typeof r.workspace_ready === "boolean" ? r.workspace_ready : null;
+    if (v !== workspaceReady) {
+      workspaceReady = v;
       studioConnected = v;
       broadcastStatus();
     }
@@ -208,6 +215,12 @@ async function refreshStudioStatus() {
 }
 
 function handleBridgeMessage(msg) {
+  if ("workspace_ready" in msg && (typeof msg.workspace_ready === "boolean" || msg.workspace_ready === null)) {
+    workspaceReady = msg.workspace_ready;
+    studioConnected = msg.workspace_ready;
+  }
+  if (typeof msg.workspace_name === "string") workspaceName = msg.workspace_name;
+  if (typeof msg.runner_ready === "boolean") runnerReady = msg.runner_ready;
   if ("studio" in msg && (typeof msg.studio === "boolean" || msg.studio === null)) {
     studioConnected = msg.studio;
   }
@@ -217,8 +230,8 @@ function handleBridgeMessage(msg) {
   if ("studio_proc" in msg && (typeof msg.studio_proc === "boolean" || msg.studio_proc === null)) {
     studioProc = msg.studio_proc;
   }
-  if (msg.type === "studio_status") {
-    resolvePending(msg.id, { ok: true, studio: studioConnected });
+  if (msg.type === "workspace_status" || msg.type === "studio_status") {
+    resolvePending(msg.id, { ok: true, workspace_ready: workspaceReady, workspace_name: workspaceName, runner_ready: runnerReady, studio: studioConnected });
     broadcastStatus();
     return;
   }
@@ -245,6 +258,16 @@ function handleBridgeMessage(msg) {
     resolvePending(msg.id, msg.ok
       ? { ok: true, text: msg.text, images: msg.images || [] }
       : { ok: false, kind: msg.kind, error: msg.error });
+    return;
+  }
+  if (msg.type === "approval_required") {
+    resolvePending(msg.id, {
+      ok: false,
+      kind: "approval_required",
+      approval_token: msg.approval_token,
+      expires_in_ms: msg.expires_in_ms,
+      details: msg.details || {},
+    });
     return;
   }
   if (msg.type === "mcp_status") {
@@ -286,7 +309,12 @@ function failAllPending(reason) {
 
 // ── status push to any open DeepSeek tab + popup ─────────────────────────
 function statusObj() {
-  return { type: "zs-status", connected, mcpAlive, studio: studioConnected, studioApp, studioProc, tools: toolsCache.length, servers: serversCache };
+  return {
+    type: "zs-status", connected, mcpAlive,
+    workspaceReady, workspaceName, runnerReady,
+    studio: workspaceReady, studioApp: workspaceReady, studioProc: workspaceReady,
+    tools: toolsCache.length, servers: serversCache,
+  };
 }
 
 function broadcastStatus() {
@@ -318,9 +346,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "call_tool": {
         const timeout = (msg.timeout || 120000) + 10000;
         const r = await send(
-          { type: "call_tool", name: msg.name, arguments: msg.arguments, timeout: msg.timeout },
+          {
+            type: "call_tool", name: msg.name, arguments: msg.arguments, timeout: msg.timeout,
+            operation_id: msg.operation_id || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+          },
           timeout
         );
+        sendResponse(r);
+        break;
+      }
+      case "approve_operation": {
+        const r = await send({
+          type: "approve_operation",
+          approval_token: msg.approval_token,
+          approved: msg.approved === true,
+        }, (msg.timeout || 120000) + 10000);
         sendResponse(r);
         break;
       }

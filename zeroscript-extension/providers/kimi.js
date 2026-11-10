@@ -793,8 +793,8 @@ const ZSProvider = (() => {
     // runner, etc.) instead of emitting the ZeroScript command blocks that drive
     // Roblox Studio - model behavior, not something the prompt fully prevents.
     unstableWarning:
-      "Kimi sometimes uses its own native tools instead of the Roblox commands (model behavior, not the extension). " +
-      "If it stops acting in Roblox Studio and answers in plain text or runs its own tools, remind it to use the ZeroScript commands - or start a new session.",
+      "Kimi sometimes uses its own native tools instead of the local workspace commands (model behavior, not the extension). " +
+      "If it stops acting on the selected project and answers in plain text or runs its own tools, remind it to use the ZeroScript commands - or start a new session.",
     init({ diag: d } = {}) { if (d) diag = d; },
     // turns
     allItems, isUserItem, isAssistantItem, itemText, classifyText,

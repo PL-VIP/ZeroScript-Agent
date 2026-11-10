@@ -690,7 +690,7 @@ const ZSProvider = (() => {
     // Gemini drifts away from emitting tool blocks after a while in long
     // sessions - observed live, model behavior, not something the prompt fixes.
     unstableWarning:
-      "Gemini tends to stop using the Roblox tools after a while in long sessions (model behavior, not the extension). " +
+      "Gemini tends to stop using the local workspace tools after a while in long sessions (model behavior, not the extension). " +
       "If it starts answering in plain text instead of acting, remind it to use the commands - or start a new session.",
     init({ diag: d } = {}) { if (d) diag = d; },
     // turns

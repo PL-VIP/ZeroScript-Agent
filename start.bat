@@ -18,17 +18,17 @@ echo   === ZeroScript Bridge ===
 echo.
 
 REM Refuse to run from inside a ZIP preview: Explorer extracts start.bat alone
-REM to %TEMP%, so bridge.py is missing and the launch fails with a confusing
+REM to %TEMP%, so agent_bridge.py is missing and the launch fails with a confusing
 REM Python error. Detect the missing file up front with a plain explanation -
 REM this is one of the most common first-run mistakes.
-if not exist "%~dp0bridge.py" (
-    echo   ERROR: bridge.py not found next to start.bat.
+if not exist "%~dp0agent_bridge.py" (
+    echo   ERROR: agent_bridge.py not found next to start.bat.
     echo.
     echo   If you opened start.bat from inside the downloaded ZIP, first EXTRACT
     echo   the whole ZIP ^(right-click, "Extract All..."^), then run start.bat
     echo   from the extracted folder.
     echo.
-    call :log "FATAL: bridge.py missing next to start.bat (run from inside ZIP?)."
+    call :log "FATAL: agent_bridge.py missing next to start.bat (run from inside ZIP?)."
     pause
     exit /b 1
 )
@@ -146,7 +146,7 @@ echo   [2/3] Checking websockets library...
 %PY% -c "import websockets" >nul 2>nul
 if errorlevel 1 (
     echo         Installing websockets - first time only...
-    %PY% -m pip install --user websockets
+    %PY% -m pip install --user "websockets>=14,<18"
     if errorlevel 1 (
         echo.
         echo   ERROR: Could not install websockets ^(see pip output above^).
@@ -165,35 +165,21 @@ call :log "websockets library OK"
 
 REM --- 3. Run the bridge ------------------------------------------------------
 echo.
-echo   [3/3] Starting bridge...
+echo   [3/3] Starting workspace bridge...
 
-REM If a previous bridge is already listening on 17613, say so instead of
-REM silently killing it - a double-launch is easy to do by mistake (e.g.
-REM double-clicking start.bat twice) and should not look like nothing happened.
+REM Never kill an arbitrary process just because it owns the configured port.
+REM Report the exact PID and let the user close a previous bridge themselves.
 set "OLDPID="
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :17613 ^| findstr LISTENING 2^>nul') do (
     set "OLDPID=%%a"
 )
 if defined OLDPID (
-    echo         A previous bridge ^(pid !OLDPID!^) is already running on this port.
-    echo         Replacing it with this new instance...
-    call :log "Killing previous bridge instance (pid !OLDPID!) on port 17613."
-    taskkill /F /T /PID !OLDPID! >nul 2>nul
-    REM Give Windows a moment to actually free the socket before we rebind it.
-    timeout /t 1 /nobreak >nul
-    set "STILLTHERE="
-    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :17613 ^| findstr LISTENING 2^>nul') do (
-        set "STILLTHERE=%%a"
-    )
-    if defined STILLTHERE (
-        echo.
-        echo   WARNING: port 17613 is still held by pid !STILLTHERE! after trying
-        echo   to close the previous bridge. If the bridge below fails to start,
-        echo   close that process manually in Task Manager ^(or restart Windows^)
-        echo   and run start.bat again.
-        echo.
-        call :log "WARNING: port 17613 still held by pid !STILLTHERE! after taskkill."
-    )
+    echo   ERROR: port 17613 is already used by pid !OLDPID!.
+    echo   Close the previous ZeroScript Agent window or inspect that process in
+    echo   Task Manager, then run start.bat again. Nothing was terminated.
+    call :log "Port 17613 already held by pid !OLDPID!; refused to kill it."
+    pause
+    exit /b 1
 )
 
 echo.
@@ -206,13 +192,18 @@ echo  ##   minimize this window and leave it running.           ##
 echo  ##                                                        ##
 echo  ############################################################
 echo.
-call :log "Launching bridge.py with %PY%"
-%PY% "%~dp0bridge.py"
+if not "%~1"=="" (
+    echo         Workspace: %~1
+) else (
+    echo         Workspace: config.json ^(default: this repository^)
+)
+call :log "Launching agent_bridge.py with %PY%"
+%PY% "%~dp0agent_bridge.py" --workspace "%~1"
 REM Show the exit code ON SCREEN, not only in the log: a screenshot of this
 REM terminal is usually the only diagnostic we get, and "Bridge stopped" alone
 REM does not say whether it crashed (non-zero) or was closed normally.
 set "BRIDGE_EXIT=%errorlevel%"
-call :log "bridge.py exited with code %BRIDGE_EXIT%"
+call :log "agent_bridge.py exited with code %BRIDGE_EXIT%"
 
 echo.
 if not "%BRIDGE_EXIT%"=="0" (
@@ -227,13 +218,13 @@ pause >nul
 exit /b 0
 
 REM --- Subroutine: verify %PY% is a real, usable Python ------------------------
-REM Returns 0 only if the interpreter runs, has a working pip, AND is Python 3.9
+REM Returns 0 only if the interpreter runs, has a working pip, AND is Python 3.10
 REM or newer. The pip check rejects the Microsoft Store stub (WindowsApps\
 REM python.exe). The version check rejects old interpreters (e.g. 3.7/3.8) that
 REM lack asyncio.to_thread, which the bridge requires.
 :validate_py
 %PY% -m pip --version >nul 2>nul || exit /b 1
-%PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >nul 2>nul
+%PY% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul
 exit /b %errorlevel%
 
 REM --- Subroutine: append a line to start.log (best-effort, never blocks) -----

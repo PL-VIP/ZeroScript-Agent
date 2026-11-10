@@ -81,23 +81,18 @@
   // Ko-fi tip link.
   const KOFI_URL = "https://ko-fi.com/sebattfg";
   // GitHub releases page - where users download the Bridge + start.bat.
-  const GITHUB_URL = "https://github.com/sebattfg/ZeroScript-Free";
+  const GITHUB_URL = "https://github.com/PL-VIP/ZeroScript-Agent";
   // Shown in the panel instead of a static "Free" label, so a user's screenshot
   // alone tells us which build they're on for debugging. Pulled from
   // manifest.json (single source of truth) rather than duplicated here.
   const EXT_VERSION = chrome.runtime.getManifest().version;
   // YouTube tutorial - how to set up the Bridge.
-  const VIDEO_URL = "https://youtu.be/kPKiZLZ9_Ps";
+  const VIDEO_URL = "";
   // Work.ink locked link - free "watch an ad" support option. Set once the
   // locker is created at https://work.ink; the button is hidden until then.
-  const WORKINK_URL = "https://work.ink/2JXi/zeroscript-free-roblox-ai-coding-tool";
+  const WORKINK_URL = "";
   // Roblox "tip" Game Passes - the native currency for the audience.
-  const ROBUX_PASSES = [
-    { robux: 30, id: 1865342947 },
-    { robux: 100, id: 1866782815 },
-    { robux: 300, id: 1869176990 },
-    { robux: 1000, id: 1865192973 },
-  ];
+  const ROBUX_PASSES = [];
   const passUrl = (id) => `https://www.roblox.com/game-pass/${id}`;
   // AI chat sites ZeroScript works on. Keep in sync with manifest.json
   // content_scripts and background.js PROVIDER_URLS when adding a provider.
@@ -926,14 +921,14 @@
       const servers = (A.bridge && A.bridge.servers) || [];
       const lines = servers.length
         ? servers.map((sv) => {
-            const label = sv.id === "roblox" ? "Roblox Studio (primary)" : `${sv.id} (addon)`;
+            const label = sv.id === "workspace" ? "Workspace (primary)" : `${sv.id} (addon)`;
             return `- ${sv.id}: ${label} - ${sv.alive ? `${sv.tools || 0} commands available` : "offline (no tools)"}`;
           })
-        : ["- roblox: Roblox Studio (primary) - unknown (bridge did not report server health)"];
+        : ["- workspace: local workspace (primary) - unknown (bridge did not report server health)"];
       return (
         `Output of 'list_mcp_servers':\n` +
         `Connected MCP servers (${lines.length}):\n${lines.join("\n")}\n` +
-        `Use list_commands with a "server" param (one of the ids above) to see that server's exact commands. Without "server", list_commands defaults to "roblox".`
+        `Use list_commands with a "server" param (one of the ids above) to see that server's exact commands. Without "server", list_commands defaults to "workspace".`
       );
     }
     // Virtual command: list available commands with full details. Defaults to
@@ -941,35 +936,35 @@
     // if the model explicitly asks via {"server": "<id>"} (see list_mcp_servers).
     if (name === "list_commands" || name === "list_tools") {
       await ensureTools();
-      const requested = (args.server || "roblox").trim();
+      const requested = (args.server || "workspace").trim();
       // The MCP proxy keeps advertising Roblox's catalogue even with no Studio
       // attached, so list_commands would hand back the full command list and read
       // as "Roblox is fine" - then every command silently fails. When Roblox is
       // actually unusable, short-circuit the DEFAULT (roblox) listing into a plain
       // "Roblox is down" note that points the model at the other server(s), so it
       // can keep working in degraded mode instead of firing dead Roblox commands.
-      if (requested === "roblox") {
+      if (requested === "workspace") {
         const s = A.bridge || {};
         const srv = s.servers || [];
-        const rbx = srv.find((x) => x.id === "roblox");
-        const rbxAlive = rbx ? !!rbx.alive : (!!s.mcpAlive || srv.some((x) => x.alive));
-        const rbxUsable = !!s.connected && rbxAlive && s.studio !== false;
-        if (!rbxUsable) {
-          const others = srv.filter((x) => x.id !== "roblox" && x.alive && (x.tools || 0) > 0);
+        const primary = srv.find((x) => x.id === "workspace");
+        const primaryAlive = primary ? !!primary.alive : (!!s.mcpAlive || srv.some((x) => x.alive));
+        const workspaceUsable = !!s.connected && primaryAlive && s.workspaceReady !== false;
+        if (!workspaceUsable) {
+          const others = srv.filter((x) => x.id !== "workspace" && x.alive && (x.tools || 0) > 0);
           const otherStr = others.length
-            ? `Other connected MCP server(s): ${others.map((x) => x.id).join(", ")}. Call list_mcp_servers, then list_commands with a "server" param to use them for anything that does not need Roblox.`
+            ? `Other connected MCP server(s): ${others.map((x) => x.id).join(", ")}.`
             : `No other MCP server is connected right now.`;
-          return `Output of '${name}':\nRoblox Studio is currently OFFLINE (closed, no place open, or its MCP server disabled), so its commands cannot run. This is an environment problem on the user's machine, not your mistake. Tell the user in one short sentence to open their place in Roblox Studio and enable its MCP server. ${otherStr}`;
+          return `Output of '${name}':\nThe selected workspace is currently unavailable, so its commands cannot run. Ask the user to restart the bridge with a valid workspace. ${otherStr}`;
         }
       }
       const known = new Set(A.toolList.map((t) => t.server).filter(Boolean));
       // Tools from a bridge that doesn't tag "server" yet (old version) have no
       // .server field at all - treat those as the primary server rather than
       // hiding everything.
-      const scoped = A.toolList.filter((t) => (t.server || "roblox") === requested);
-      if (!A.toolList.length) return `Output of '${name}':\nNo commands available - the bridge or Roblox Studio may be offline.`;
+      const scoped = A.toolList.filter((t) => (t.server || "workspace") === requested);
+      if (!A.toolList.length) return `Output of '${name}':\nNo commands available - the workspace bridge may be offline.`;
       if (!scoped.length) {
-        return `Output of '${name}':\nERROR: no server named "${requested}" is connected. Connected servers: ${[...known].join(", ") || "roblox"}. Call list_mcp_servers to check.`;
+        return `Output of '${name}':\nERROR: no server named "${requested}" is connected. Connected servers: ${[...known].join(", ") || "workspace"}. Call list_mcp_servers to check.`;
       }
       const lines = scoped.map((t) => {
         const props = (t.inputSchema && t.inputSchema.properties) || {};
@@ -1021,7 +1016,9 @@
     // it can only be right. (It still needs the game RUNNING; that's documented.)
     if ((bareName === "user_keyboard_input" || bareName === "user_mouse_input") && !args.datamodel_type)
       args.datamodel_type = "Client";
-    const timeout = name === "execute_luau" ? 20000 : 120000;
+    const timeout = bareName === "run_command"
+      ? Math.max(1000, Math.min(Number(args.timeout_ms || 120000) + 5000, 605000))
+      : name === "execute_luau" ? 20000 : 120000;
     // Hard watchdog: even if the background worker never answers, the loop
     // gets a definitive result and continues.
     const hardCap = new Promise((res) =>
@@ -1039,6 +1036,29 @@
     clearInterval(stopTimer);
     if (r && r.kind === "stopped") return "(stopped by user)";
     if (!r) return ZS.FEEDBACK.bridgeOffline;
+    if (r.kind === "approval_required") {
+      const d = r.details || {};
+      const lines = [
+        d.title || "Approve this operation?",
+        "",
+        d.command ? `Command: ${d.command}` : `Operation: ${d.operation || name}`,
+        d.cwd != null ? `Working directory: ${d.cwd}` : "",
+        d.runner ? `Runner: ${d.runner}` : "",
+        d.network != null ? `Network requested: ${d.network ? "YES" : "no"}` : "",
+        d.timeout_ms ? `Timeout: ${d.timeout_ms} ms` : "",
+        d.arguments ? `Arguments: ${JSON.stringify(d.arguments, null, 2)}` : "",
+        "",
+        d.warning || "Review the operation carefully. Approval is valid once only.",
+      ].filter(Boolean);
+      const approved = window.confirm(lines.join("\n"));
+      r = await bg({
+        type: "approve_operation",
+        approval_token: r.approval_token,
+        approved,
+        timeout,
+      });
+      if (!approved) return `ERROR: '${name}' was not run because the user denied the local approval request.`;
+    }
     // The MCP server answers SUCCESSFULLY (ok:true) when no Studio is attached
     // (Studio closed / no place / MCP option disabled) - with an explanatory
     // text instead of a result. Surface it as a proper environment ERROR so the
@@ -1103,13 +1123,13 @@
       ui.banner("warn", "Reload this page",
         "ZeroScript was updated or reloaded while this tab was open, so this page is running an " +
         "old copy of it and commands can no longer run. Reload the page (F5) to reconnect - your " +
-        "bridge and Roblox Studio are unaffected.");
+        "bridge and workspace are unaffected.");
       diag("bridge.staleExtension", { name, error: r.error });
       return ZS.FEEDBACK.staleExtension;
     }
     if (r.kind === "disconnected") return ZS.FEEDBACK.bridgeOffline;
     if (r.kind === "timeout") {
-      return `ERROR: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\nTry a shorter/simpler call or check that Roblox Studio is open and responsive.`;
+      return `ERROR: tool '${name}' timed out after ${name === "execute_luau" ? 20 : 120}s.\n${r.error}\nTry a smaller operation or check that the workspace bridge is responsive.`;
     }
     if (name === "execute_luau") {
       const err = r.error || "";
@@ -1460,8 +1480,8 @@
               // what the model gets when it lists commands itself. Anti-drift only
               // needs the primary Roblox set; addon commands were listed on demand
               // and the bridge routes by name regardless.
-              const roblox = A.toolList.filter((t) => (t.server || "roblox") === "roblox");
-              toSend += ZS.toolsReminder(roblox) + "\n" + ZS.memoryNudge();
+              const workspace = A.toolList.filter((t) => (t.server || "workspace") === "workspace");
+              toSend += ZS.toolsReminder(workspace) + "\n" + ZS.memoryNudge();
               diag("tools.reminder", { after: REMIND_TOOLS_EVERY });
             }
           }
@@ -1639,6 +1659,7 @@
       siteName: P.displayName,
       customPrompt: ui.getCustomPrompt(),
       providerNotes: P.promptExtra || "",
+      tools: A.toolList,
     });
   }
 
@@ -1836,8 +1857,8 @@
                                // the model makes seconds later)
       if (!alive()) return;
       if (!A.toolList.length) {
-        ui.banner("warn", "Bridge or Studio offline",
-          "Could not fetch Roblox tools. Run start.bat and make sure Roblox Studio is open, then try again.");
+        ui.banner("warn", "Workspace bridge offline",
+          "Could not fetch workspace tools. Run start.bat or MacOS_Start.command with a valid workspace, then try again.");
         return;
       }
       const modeState = await P.ensureComposerReady("startup");
@@ -1871,16 +1892,16 @@
         // (the bridge keeps advertising Roblox's catalogue even with no Studio
         // attached, so A.toolList still has 25+ entries that were never actually
         // usable this boot).
-        if (/Roblox Studio is currently OFFLINE/.test(toolFeedback)) {
-          decorate.toolBox(startRes.item, "Loading commands", "err", "Roblox offline", true);
+        if (/selected workspace is currently unavailable/i.test(toolFeedback)) {
+          decorate.toolBox(startRes.item, "Loading commands", "err", "Workspace unavailable", true);
         } else {
           // Count what the model ACTUALLY received: list_commands is scoped to the
           // primary Roblox server (main.js ~629), so showing A.toolList.length (every
           // connected server merged - Roblox + Blender + addons) overstated the boot
           // count and made it look like all servers were loaded at once. Count the
           // Roblox-scoped tools instead, matching the real result.
-          const robloxCount = A.toolList.filter((t) => (t.server || "roblox") === "roblox").length;
-          decorate.toolBox(startRes.item, "Loading commands", "done", `${robloxCount} commands`, true);
+          const workspaceCount = A.toolList.filter((t) => (t.server || "workspace") === "workspace").length;
+          decorate.toolBox(startRes.item, "Loading commands", "done", `${workspaceCount} commands`, true);
         }
         const base2 = await submitAndGetBase(toolFeedback);
         const readyRes = await waitForResponse(base2); // wait for "I'm ready" reply
@@ -1890,7 +1911,7 @@
       A.started = true;
       rememberSession(P.conversationKey()); // survives virtualization AND reloads
       ui.setStarted(true);
-      ui.toast(`Agent ready. Ask ${P.displayName} to build something in Roblox.`);
+      ui.toast(`Workspace agent ready. Ask ${P.displayName} to work on the project.`);
     } catch (e) {
       if (alive()) ui.banner("warn", "Startup failed", String((e && e.message) || e));
     } finally {
@@ -2673,7 +2694,7 @@
     // "disappears" from the menu while still running - and self-heals the local
     // cache the moment we see a server it didn't know about.
     function mergedMcpServers() {
-      const live = ((A.bridge && A.bridge.servers) || []).filter((sv) => sv.id !== "roblox");
+      const live = ((A.bridge && A.bridge.servers) || []).filter((sv) => sv.id !== "workspace");
       const byId = new Map(customMcpServers.map((s) => [s.id, s]));
       const merged = live.map((sv) => {
         const cached = byId.get(sv.id);
@@ -2696,10 +2717,10 @@
       }
       return merged;
     }
-    // Derive a config-safe server id from a display name (roblox is reserved).
+    // Derive a config-safe server id from a display name (workspace is reserved).
     function mcpSlug(name) {
       let s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-      if (!s || s === "roblox") s = `addon-${s || "server"}`;
+      if (!s || s === "workspace") s = `addon-${s || "server"}`;
       let id = s, n = 2;
       while (customMcpServers.some((x) => x.id === id)) id = `${s}-${n++}`;
       return id;
@@ -2748,11 +2769,11 @@
       }
       const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       const mergedServers = mergedMcpServers();
-      // Roblox always heads the list - greyed out, no health dot (its own status
+      // The selected workspace always heads the list - greyed out, no health dot (its own status
       // is already the main ZeroScript dot elsewhere) and no remove button (it's
       // the primary server, protected bridge-side too).
       let mcpList =
-        `<div class="zs-mcp-item zs-mcp-item-primary"><div class="zs-mcp-info"><span class="zs-mcp-name">Roblox Studio</span><span class="zs-mcp-url">primary - always connected</span></div></div>`;
+        `<div class="zs-mcp-item zs-mcp-item-primary"><div class="zs-mcp-info"><span class="zs-mcp-name">Local workspace</span><span class="zs-mcp-url">primary sandbox</span></div></div>`;
       mergedServers.forEach((s, i) => {
         // alive === undefined -> the bridge hasn't reported this server's health
         // yet (just added/removed, still restarting) - shown neutral, not red.
@@ -2772,25 +2793,24 @@
            ${WORKINK_URL ? `<button class="zs-tip-opt zs-tip-ad" data-u="${WORKINK_URL}"><span>Watch an ad to support</span><span class="zs-tip-sub">free, takes a minute</span></button>` : ""}
          </section>
          <section class="zs-menu-sec">
-           <div class="zs-sec-label"><span>Support with Robux / Ko-fi</span></div>
+           <div class="zs-sec-label"><span>Support development</span></div>
            <button class="zs-tip-opt zs-tip-kofi" data-u="${KOFI_URL}"><span>Tip on Ko-fi</span><span class="zs-tip-sub">any amount</span></button>
-           <div class="zs-tip-sep">or tip in Robux</div>
-           <div class="zs-rbx-grid">${passes}</div>
+           ${passes ? `<div class="zs-rbx-grid">${passes}</div>` : ""}
          </section>
          <section class="zs-menu-sec">
            <div class="zs-sec-label"><span>Custom prompt</span></div>
            <div class="zs-menu-note">Added below the system prompt on every new session. The built-in prompt can't be edited.</div>
-           <textarea id="zs-set-text" rows="4" placeholder="e.g. Always comment your Luau code. Prefer small modular scripts."></textarea>
+           <textarea id="zs-set-text" rows="4" placeholder="e.g. Preserve the existing style. Prefer small, focused changes."></textarea>
            <div class="zs-set-row"><button id="zs-set-save">Save</button><span id="zs-set-status"></span></div>
          </section>
          <section class="zs-menu-sec">
            <div class="zs-sec-label"><span>MCP servers</span></div>
-           <div class="zs-menu-note">Roblox Studio is always connected (primary). Add another MCP server (e.g. Blender, Sketchfab) as an addon - the bridge restarts briefly to load it. Experimental.</div>
+           <div class="zs-menu-note">The selected local workspace is the primary sandbox. External MCP server management is temporarily unavailable in Workspace Agent 2.0.</div>
            ${mcpList}
            <div class="zs-mcp-sep"></div>
-           <input id="zs-mcp-name" class="zs-mcp-field" placeholder="Name, e.g. Blender" />
-           <input id="zs-mcp-url" class="zs-mcp-field" placeholder="Start command, e.g. npx -y @some/mcp-server" />
-           <div class="zs-set-row"><button id="zs-mcp-add">Add server</button><span id="zs-mcp-status"></span></div>
+           <input id="zs-mcp-name" class="zs-mcp-field" placeholder="External MCP addons are unavailable" disabled />
+           <input id="zs-mcp-url" class="zs-mcp-field" placeholder="Workspace tools are active" disabled />
+           <div class="zs-set-row"><button id="zs-mcp-add" disabled>Unavailable in 2.0</button><span id="zs-mcp-status"></span></div>
          </section>`;
       const open = (url) => { try { window.open(url, "_blank", "noopener"); } catch {} menuEl.hidden = true; };
       menuEl.querySelectorAll("button.zs-site-opt, .zs-tip-opt").forEach((b) =>
@@ -2884,11 +2904,11 @@
         : "";
       setupCard.innerHTML =
         `<div id="zs-setup-head"><span id="zs-setup-logo">ZeroScript</span><span id="zs-setup-tag">Setup</span></div>` +
-        `<div id="zs-setup-sub">The <b>Bridge</b> is what connects this chat to Roblox Studio. Three steps and you're running.</div>` +
+        `<div id="zs-setup-sub">The <b>Bridge</b> connects this chat to one selected local workspace. Three steps and you're running.</div>` +
         `<ol id="zs-setup-steps">` +
           `<li>Download the Bridge from GitHub</li>` +
           `<li>Run <code>start.bat</code></li>` +
-          `<li>Back here, click <b>Start Roblox agent</b></li>` +
+          `<li>Back here, click <b>Start workspace agent</b></li>` +
         `</ol>` +
         `<div class="zs-setup-copy-row">` +
           `<input type="text" id="zs-setup-link" readonly value="${GITHUB_URL}">` +
@@ -2974,7 +2994,7 @@
       else if (A.starting) {
         toneClass = "starting";
         indicator = `<span class="zs-spin"></span>`;
-        msg = `Starting the Roblox agent…`;
+        msg = `Starting the workspace agent…`;
         label = "Starting…"; kind = "starting"; disabled = true;
       } else if (A.started) {
         // Prefer the ADVERTISED list length (A.toolList - the AGGREGATE catalogue
@@ -2999,24 +3019,9 @@
           // stale "N tools" text below, reading as if nothing was wrong.
           toneClass = "warn"; warn = true;
           msg = `<b>Agent active</b> · bridge offline, run start.bat`;
-        } else if ((placeDown || appDown || studioDown) && addonOk) {
-          // DEGRADED session by CHOICE: the user started the agent with Roblox
-          // down but other MCP server(s) alive (the "Start agent (Roblox
-          // offline)" path) - they may only want the addon tools (e.g. Blender).
-          // Keep the YELLOW dot as the honest health signal, but do NOT keep the
-          // red imperative "open Roblox Studio" nag on screen for the whole
-          // session (warn=false → no zs-state-warn red text). The full nag
-          // still shows when NO server is usable (the branches below).
-          toneClass = "warn";
-          msg = `<b>Agent active</b>${tools ? ` · ${tools} tools` : ""} · Roblox offline`;
-        } else if (placeDown) {
+        } else if (placeDown || appDown || studioDown) {
           toneClass = "warn"; warn = true;
-          msg = `<b>Agent active</b> · open a place in Roblox Studio`;
-        } else if (appDown || studioDown) {
-          toneClass = "warn"; warn = true;
-          msg = studioProcUp
-            ? `<b>Agent active</b> · Studio is open but not connected - open <b>Assistant Settings &gt; MCP Servers</b> in Studio`
-            : `<b>Agent active</b> · open Roblox Studio & enable its MCP server`;
+          msg = `<b>Agent active</b> · selected workspace unavailable`;
         } else {
           toneClass = "active";
           // No inline dot here: the leading status dot already shows green, two
@@ -3035,32 +3040,13 @@
         if (bridgeOk) {
           toneClass = "standby";
           msg = `Standby. Start the agent, or just chat.`;
-          label = "▶︎ Start Roblox agent"; kind = "start";
-        } else if (addonOk) {
-          // Roblox is down but another MCP server is live: allow a DEGRADED start
-          // (yellow). The agent runs on the other server(s); Roblox tools stay
-          // unavailable until Studio is back. Button enabled, but visibly warned.
-          toneClass = "warn"; warn = true;
-          msg = !A.bridge.connected
-            ? `Run <b>start.bat</b> on your PC.`
-            : studioProcUp
-              ? `<b>Studio open but not connected</b> - open <b>Assistant Settings &gt; MCP Servers</b> in Studio, or start without it.`
-              : `<b>Roblox Studio offline</b> - start with your other MCP server(s).`;
-          label = "▶︎ Start agent (Roblox offline)"; kind = "start-degraded";
+          label = "▶︎ Start workspace agent"; kind = "start";
         } else {
           toneClass = "warn"; warn = true;
           msg = !A.bridge.connected
             ? `Run <b>start.bat</b> on your PC.`
-            : placeDown
-              ? `Open a <b>place</b> in Roblox Studio.`
-              : (appDown || studioDown) && studioProcUp
-                ? `Studio is open but not connected - open <b>Assistant Settings &gt; MCP Servers</b> in Studio.`
-                : appDown
-                  ? `Open <b>Roblox Studio</b> &amp; enable its MCP server.`
-                  : studioDown
-                    ? `Open <b>Roblox Studio</b> &amp; enable its MCP server.`
-                    : `Open <b>Roblox Studio</b> for the tools.`;
-          label = "▶︎ Start Roblox agent"; kind = "start";
+            : `Restart the bridge with a valid workspace path.`;
+          label = "▶︎ Start workspace agent"; kind = "start";
         }
         disabled = !bridgeOk && !addonOk;
       } else {
@@ -3132,62 +3118,26 @@
       A.bridge = s;
       if (!dot) return;
       const servers = s.servers || [];
-      // ZeroScript status tracks ONLY the primary Roblox MCP server. Every other
-      // server is an addon and must NEVER make the dot/gate look connected while
-      // Roblox itself is down. Old bridges don't send per-server health, so fall
-      // back to the aggregate signals they do send (mcpAlive / total tools).
-      const roblox = servers.find((x) => x.id === "roblox");
-      const mcpUp = roblox ? !!roblox.alive : (!!s.mcpAlive || servers.some((x) => x.alive));
-      // Roblox-only count drives the connectivity gate (the dot must never look
-      // green off an addon while Roblox itself is down)...
-      const robloxTools = roblox ? (roblox.tools || 0) : (s.tools || 0);
-      const mcpOk = s.connected && (mcpUp || robloxTools > 0);
-      // ...but the DISPLAYED count is the aggregate across every server (Roblox +
-      // addons like Blender), so it stays consistent with the bar and doesn't
-      // under-report when addon servers are loaded.
-      const totalTools = servers.reduce((n, x) => n + (x.tools || 0), 0) || s.tools || robloxTools;
-      // studio === false means the MCP server answered but the Studio is not USABLE
-      // (no place loaded). studioApp tells the two sub-cases apart:
-      //   studioApp === false → no Studio connected at all (app closed OR its MCP
-      //                         server option is disabled - indistinguishable).
-      //   studioApp === true  → Studio open but no place loaded (home screen / place
-      //                         closed mid-session). THIS is the case that used to
-      //                         wrongly read "Connected".
-      // null/undefined = unknown (old bridge / probe busy) → don't degrade.
-      const studioOff = mcpOk && s.studio === false;
-      const noApp = studioOff && s.studioApp === false;
-      const noPlace = studioOff && s.studioApp === true;
-      const ok = mcpOk && !studioOff;
+      const primary = servers.find((x) => x.id === "workspace");
+      const primaryUp = primary ? !!primary.alive : (!!s.mcpAlive || servers.some((x) => x.alive));
+      const primaryTools = primary ? (primary.tools || 0) : (s.tools || 0);
+      const workspaceOff = s.workspaceReady === false;
+      const mcpOk = !!s.connected && (primaryUp || primaryTools > 0);
+      const totalTools = servers.reduce((n, x) => n + (x.tools || 0), 0) || s.tools || primaryTools;
+      const ok = mcpOk && !workspaceOff;
       dot.className = s.connected ? (ok ? "on" : "warn") : "off";
-      // Studio PROCESS running on the machine (bridge-side tasklist check).
-      // Splits noApp into its two truly different situations: Studio not
-      // launched at all vs Studio OPEN but its MCP plugin never registered
-      // with the bridge. The plugin only attempts to register ONCE (at Studio
-      // boot or on a panel/toggle interaction) and never retries by itself,
-      // so for the second case "open Roblox Studio" is dead-end advice - the
-      // action that actually works (validated live 3x, 2026-07-11) is opening
-      // Assistant Settings > MCP Servers inside the already-open Studio.
-      const procUp = s.studioProc === true;
       let txt;
       if (!s.connected) txt = "Bridge offline, run start.bat";
-      else if (!mcpOk) txt = "Bridge OK, open Roblox Studio";
-      else if (noPlace) txt = "Roblox Studio is open but no place is loaded - open a place";
-      else if (noApp) txt = procUp
-        ? "Studio is open but not connected - in Studio, open Assistant Settings > MCP Servers (or toggle its MCP server off/on)"
-        : "Roblox Studio not connected - open it and enable its MCP server";
-      else if (studioOff) txt = "Studio not connected, enable the MCP server in Roblox Studio";
-      else txt = `Connected · ${totalTools} tools ready`;
+      else if (!mcpOk) txt = "Bridge connected, but workspace tools are unavailable";
+      else if (workspaceOff) txt = "Selected workspace is unavailable";
+      else txt = `Workspace ${s.workspaceName || "ready"} · ${totalTools} tools`;
       dot.title = txt; // full bridge detail on hover over the status dot
       bridgeOk = ok;
-      studioDown = studioOff;
-      placeDown = noPlace;
-      appDown = noApp;
-      studioProcUp = procUp;
-      // A non-Roblox MCP (Blender, Sketchfab, ...) that is actually alive. When
-      // Roblox itself is down but such a server is present, the session can still
-      // start in a DEGRADED mode - the agent just can't touch Roblox until Studio
-      // is back. Gated on s.connected so a dropped bridge never reads as usable.
-      addonOk = !!s.connected && servers.some((x) => x.id !== "roblox" && x.alive && (x.tools || 0) > 0);
+      studioDown = workspaceOff;
+      placeDown = false;
+      appDown = false;
+      studioProcUp = false;
+      addonOk = false;
       // Bridge-drop alert: a clear, persistent red banner the moment a
       // previously-connected bridge goes offline. Clears on reconnect.
       if (wasConnected && !s.connected) bridgeAlert(true);
@@ -3219,7 +3169,7 @@
       const b = document.createElement("div");
       b.className = "zs-banner limit zs-stale";
       b.innerHTML = `<div class="zs-banner-t">⚠ Reload this page to reconnect ZeroScript</div>
-        <div class="zs-banner-m">ZeroScript was updated or reloaded while this tab was open, so this page is still running the old copy and commands can no longer run. Your bridge and Roblox Studio are fine - only this page needs refreshing.</div>
+        <div class="zs-banner-m">ZeroScript was updated or reloaded while this tab was open, so this page is still running the old copy and commands can no longer run. Your bridge and workspace are fine - only this page needs refreshing.</div>
         <div class="zs-banner-acts"><button class="zs-banner-reload">Reload page</button></div>`;
       b.querySelector(".zs-banner-reload").addEventListener("click", () => location.reload());
       root.appendChild(b);
@@ -3241,7 +3191,7 @@
         ? `<a class="zs-banner-video" href="${VIDEO_URL}" target="_blank" rel="noopener">▶︎ Watch setup tutorial</a>`
         : "";
       b.innerHTML = `<div class="zs-banner-t">⚠ Lost connection to ZeroScript</div>
-        <div class="zs-banner-m">The ZeroScript bridge stopped on your PC. Restart it (run start.bat and keep Roblox Studio open): the agent will reconnect automatically as soon as it is detected again.</div>
+        <div class="zs-banner-m">The ZeroScript bridge stopped on your PC. Restart it with the intended workspace (run start.bat): the agent will reconnect automatically as soon as it is detected again.</div>
         <div class="zs-banner-acts">${videoLink}<button class="zs-banner-x">Close</button></div>`;
       b.querySelector(".zs-banner-x").addEventListener("click", () => { b.remove(); if (bridgeBannerEl === b) bridgeBannerEl = null; });
       root.appendChild(b);
@@ -3290,7 +3240,7 @@
       if (A.started || !P.isFreshChat()) return;
       if (!nudged) {
         nudged = true;
-        toast("Tip: click “▶︎ Start Roblox agent” to let the AI control Roblox Studio.");
+        toast("Tip: click “▶︎ Start workspace agent” to let the AI work on the selected project.");
       }
       if (!actionBtn) return;
       actionBtn.classList.add("zs-flash");
@@ -4020,7 +3970,18 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "zs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, tools: msg.tools, servers: msg.servers });
+      ui.setStatus({
+        connected: msg.connected,
+        mcpAlive: msg.mcpAlive,
+        workspaceReady: msg.workspaceReady,
+        workspaceName: msg.workspaceName,
+        runnerReady: msg.runnerReady,
+        studio: msg.workspaceReady,
+        studioApp: msg.workspaceReady,
+        studioProc: msg.workspaceReady,
+        tools: msg.tools,
+        servers: msg.servers,
+      });
     }
     if (msg && msg.type === "zs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)

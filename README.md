@@ -1,128 +1,244 @@
-# ZeroScript - Free AI Agent for Roblox Studio
+# ZeroScript Workspace Agent
 
-![GitHub stars](https://img.shields.io/github/stars/sebattfg/ZeroScript-Free?style=social)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey)
-![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+ZeroScript Workspace Agent turns a supported browser AI chat into a local coding agent. The model can inspect, search and edit one user-selected project directory through a local bridge, without receiving general access to the computer.
 
-**ZeroScript** is a free browser extension that turns ChatGPT, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena or Meta AI into a Roblox Studio AI agent.
-Control Roblox Studio with AI directly from your browser - read/edit scripts, run Luau, generate assets, all from a normal AI chat. No API key, no terminal, no coding needed.
+The project is a fork of ZeroScript Free. Version 2.0 replaces the mandatory Roblox Studio backend with a filesystem workspace sandbox.
 
-> 🌐 **Website: [zerodev.tools/zeroscript](https://zerodev.tools/zeroscript)** the free Lemonade.gg / Luamotion alternative for building Roblox games with AI.
+## What it can do
 
-Eight AI providers are supported: **DeepSeek** (chat.deepseek.com, recommended), **ChatGPT** (chatgpt.com), **Google Gemini** (gemini.google.com), **Kimi** (kimi.ai, Moonshot AI), **GLM** (chat.z.ai, Z.ai), **Qwen** (chat.qwen.ai), **Arena** (arena.ai, a multi-model playground) and **Meta AI** (meta.ai). On ChatGPT, screenshots and image input are turned off on purpose: the free tier limits files and images on a separate quota from messages, so vision would only work part of the day. Gemini and Kimi can be unstable: Gemini tends to stop using the Roblox tools in long sessions, and Kimi sometimes uses its own native tools instead of the Roblox commands. On Arena, use **Direct** mode (ZeroScript only supports Direct; it blocks Start in Battle / Side-by-Side / Agent modes). DeepSeek is the recommended provider.
+- list project files and directories;
+- read complete UTF-8 files or selected 1-based line ranges;
+- search file names and text;
+- inspect Git status and diffs without modifying Git;
+- apply transactional multi-file unified diffs;
+- replace specific lines using a required file revision;
+- move files or send them to recoverable application trash after local approval;
+- propose test/build commands;
+- run a command only after the user approves that exact invocation.
 
-> 💬 **Stuck? Join the [Discord community](https://discord.gg/9aNyZsMWcb)** get help, share feedback, and follow updates.
+Every path used by the model is relative to the selected workspace. Absolute paths, `..` traversal, escapes through symlinks/junctions, NTFS alternate streams and configured secret files are rejected.
 
-> *Also known as: ZeroScript Roblox, ZeroScript free download, Roblox ChatGPT agent, Roblox DeepSeek agent, Roblox Gemini agent, Roblox Kimi agent, Roblox GLM agent, Roblox Qwen agent, Roblox Arena agent, Roblox Meta AI agent, Roblox Studio AI automation, Luau AI, MCP Roblox, lemonade alternative free, lemonade.gg alternative, free Roblox AI agent, free lemonade roblox alternative*
+## Architecture
 
-## ⚠️ ZeroScript is Free Beware of Paid Copycats
-
-ZeroScript is 100% free and open-source. It always has been, and it always will be. There is no official paid version, no subscription, and no sign-in required to use the extension.
-
-If you come across a site or extension using the ZeroScript name that asks for payment or account creation, it is **not** this project. The only official links are the ones listed at the top of this README.
-
-## How it works
-
+```text
+Supported AI chat
+      │
+      ▼
+browser extension and provider adapter
+      │ WebSocket on 127.0.0.1
+      ▼
+agent_bridge.py
+      ├─ workspace identity and sessions
+      ├─ one-time approval tokens
+      ├─ operation audit log
+      └─ workspace tools
+             ├─ safe path guard
+             ├─ read/search/Git
+             ├─ revisions and atomic edits
+             └─ approved command runner
 ```
-AI chat (ChatGPT / DeepSeek / Gemini / Kimi / GLM / Qwen / Arena / Meta AI, in your browser) -> ZeroScript Extension -> Bridge (your PC) -> Roblox Studio
-```
 
-The extension runs inside the chat page (ChatGPT, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena or Meta AI). When you type a request, it sends commands to the Bridge running on your PC, which drives Roblox Studio through the built-in MCP server.
-
-## Setup
-
-> 📺 **Lost? Watch the [setup tutorial on YouTube](https://youtu.be/kPKiZLZ9_Ps) it covers every step below.**
-
-### 1. Download the zip and install the extension
-
-Download the latest zip from the **Releases** page and extract it. The zip contains both the **Bridge** and the **extension folder**.
-
-To load the extension:
-
-- Go to `edge://extensions` (Edge) or `chrome://extensions` (Chrome)
-- Enable **Developer mode** (top right toggle)
-- Click **Load unpacked**
-- Select the `zeroscript-extension` folder from the extracted zip
-
-### 2. Start Roblox Studio and enable MCP
-
-Open Studio and load a Place, then enable MCP (first time only):
-
-- Click **Assistant AI** in the top bar
-- Click **...** (top right of the Assistant panel)
-- Click **Manage MCP Servers**
-- Click **Enable Studio as MCP Server**
-
-> Not sure where to find these options? The [video tutorial](https://youtu.be/kPKiZLZ9_Ps) shows exactly where to click.
-
-### 3. Run the Bridge
-
-- **Windows:** double-click `start.bat` inside the extracted folder.
-- **macOS:** double-click `MacOS_Start.command` inside the extracted folder. The first time, macOS will show a security warning ("could not verify... free of malware") - this is normal for any script downloaded outside the App Store, click **Done**, then go to **System Settings > Privacy & Security**, scroll to the bottom, and click **Open Anyway**. You only need to do this once.
-
-A small window opens, that means the Bridge is running.
-
-### 4. Start a session
-
-Go to https://chat.deepseek.com (recommended), https://chatgpt.com, https://gemini.google.com, https://www.kimi.ai, https://chat.z.ai, https://chat.qwen.ai, https://arena.ai or https://www.meta.ai and open a new chat. The ZeroScript bar appears above the input box. Click **Start session**. Type what you want to build.
-
-> Only works on chat.deepseek.com, chatgpt.com, gemini.google.com, kimi.ai, chat.z.ai, chat.qwen.ai, arena.ai and meta.ai - it will not work on any other site.
-> On Arena, keep the mode dropdown on **Direct** - ZeroScript blocks Start in Battle / Side-by-Side / Agent modes (it only drives a single Direct reply).
-> Gemini and Kimi can be unstable (model behavior, not the extension): Gemini may stop using the Roblox tools after a while, and Kimi may use its own native tools instead. If the AI starts answering in plain text instead of acting, remind it to use the commands or start a new session.
-### 5. Watch the setup tutorial
-
-[Watch the setup tutorial on YouTube](https://youtu.be/kPKiZLZ9_Ps)
-
-## What the AI can do
-
-- Read and edit scripts
-- Run Luau code directly in Studio
-- Inspect the game tree and instances
-- Generate meshes, materials, and models
-- Browse and insert from the Creator Store
-- Control play-testing
-- **Remember your project across sessions** persistent project memory saved inside your place
-
-## New in 1.5.5
-
-- **DeepSeek: the agent starts again on the new unified model.** DeepSeek merged Instant, Expert and Vision into one model and removed the model picker, which left "Start Roblox agent" stuck on "DeepSeek mode not ready". ZeroScript now recognises the new chat box, switches Search off and starts, with DeepThink left on.
-- **DeepSeek: screenshots work on every chat.** Images no longer need the Vision tab (it is gone) - the unified model sees your Studio captures, one at a time or several in a row.
-
-## New in 1.5.4
-
-- **ChatGPT: the ZeroScript bar is back above the composer.** ChatGPT redesigned its input box and renamed the layout slot the bar sits in. ZeroScript kept asking for the old name, so the browser dropped the bar into a stray strip at the bottom right of the composer and squeezed the text field to nothing. The bar now takes the right row again, and it reads the layout live instead of trusting a fixed name, so the next redesign should not knock it out.
-- **ChatGPT: long commands read cleanly on the new interface.** The same redesign replaced the code-block editor that used to hide line breaks and cut long lines off - the cause of the truncated commands fixed in 1.5.1. A 400-line block now reads back whole. If you are still on the old interface, the previous workaround is untouched.
-
-## New in 1.5.3
-
-- **Kimi moved to kimi.ai.** The old address, kimi.com, now asks for a Chinese phone number to sign in, which locked most people out. Open https://www.kimi.ai instead - the page is unchanged, the bar appears above the input box exactly as before. Reopen any Kimi tab you had on the old address.
-- **DeepSeek: the Instant model can now run the agent.** Picking Instant used to leave "Start Roblox agent" spinning forever with no explanation, because only Expert and Vision were accepted. Choose Instant before starting and the session runs on it - much faster than Expert, without the reasoning pass. Images stay off on Instant just like on Expert; the Vision tab remains the only one that can see screenshots.
-- **DeepSeek: a reply written in DeepSeek's own tool-call format no longer kills the turn.** DeepSeek occasionally answers with its internal markup instead of a ZeroScript command. Nothing recognised it, so the tool never ran, the raw tags stayed on screen and the agent stopped dead with you waiting. It is now caught, hidden behind a tool chip like any other command, and DeepSeek is told to rewrite the call properly.
-- **ChatGPT: the bar no longer clips into the composer's rounded corners.**
-
-See [CHANGELOG.md](CHANGELOG.md) for older releases.
-
-## Panel status
-
-| Dot | Meaning |
-|-----|---------|
-| Green | Bridge + Studio ready (a place is open) |
-| Yellow | Bridge OK, but Studio isn't usable yet - open Roblox Studio, load a place, or enable its MCP server (hover the dot for the exact reason) |
-| Grey | Bridge offline - run start.bat (Windows) or MacOS_Start.command (macOS) |
+The existing provider adapters for ChatGPT, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena and Meta AI are retained. The extension still uses plain command blocks in model responses, so no model API key is required.
 
 ## Requirements
 
-- Windows or macOS
-- Roblox Studio (MCP support built-in)
-- Microsoft Edge or Chrome
-- Python 3.9+ (installed automatically on Windows, or install it yourself on macOS - see [python.org/downloads](https://www.python.org/downloads/))
+- Windows or macOS/Linux;
+- Python 3.10 or newer;
+- Microsoft Edge or Google Chrome;
+- a supported AI site account;
+- optional: Git for `git_status` and `git_diff`;
+- optional: Docker for container command execution.
 
-## Support
+The launchers install the single Python dependency, `websockets`, when it is missing.
 
-ZeroScript is free. If it saves you time: [Ko-fi](https://ko-fi.com/sebattfg) - Robux tip passes available in the extension panel
+## Installation
 
----
+### 1. Load the extension
 
-Credit: the idea for connecting other MCP servers (Blender, Sketchfab, etc.) alongside Roblox Studio came from [javnpa](https://github.com/javnpa).
+1. Open `edge://extensions` or `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the `zeroscript-extension` directory from this repository.
 
-Credit: macOS/Linux support contributed by [archivealf](https://github.com/archivealf).
+Reload supported AI tabs after updating the extension.
+
+### 2. Start the bridge with a workspace
+
+Windows:
+
+```powershell
+start.bat "C:\path\to\your\project"
+```
+
+macOS/Linux:
+
+```bash
+./MacOS_Start.command "/path/to/your/project"
+```
+
+If no path is supplied, `workspace.root` from `config.json` is used. The included configuration uses `.` and therefore selects this repository.
+
+The `ZS_WORKSPACE` environment variable can also select the directory:
+
+```powershell
+$env:ZS_WORKSPACE = "C:\path\to\project"
+python agent_bridge.py
+```
+
+### 3. Start an agent session
+
+1. Open a new, empty conversation on a supported AI site.
+2. Confirm that the ZeroScript status dot is green and shows the workspace name.
+3. Click **Start workspace agent**.
+4. Wait for the model to call `list_commands` and report that it is ready.
+
+## Command approval
+
+`run_command` never executes immediately. The bridge first issues a one-time approval request and the extension displays:
+
+- the exact executable and argument array;
+- working directory;
+- host or Docker runner mode;
+- requested network access;
+- timeout;
+- a risk warning.
+
+The user can choose only **OK for this invocation** or **Cancel**. Approval is tied to the exact workspace, command arguments and request token. It expires after 60 seconds, is removed when the socket disconnects and cannot be reused. An identical later command requires another approval.
+
+`move_path` and `trash_path` use the same local approval mechanism.
+
+## Command runner modes
+
+Configure `runner.mode` in `config.json`.
+
+### Host mode
+
+```json
+{
+  "runner": {
+    "mode": "host",
+    "timeout_ms": 120000
+  }
+}
+```
+
+Host mode is broadly compatible, but the process itself is not an OS sandbox and may access resources or the network outside the workspace. The approval dialog clearly warns about this. The runner passes a reduced environment by default instead of forwarding tokens and arbitrary environment variables. Use host mode only for commands you understand.
+
+### Docker mode
+
+```json
+{
+  "runner": {
+    "mode": "docker",
+    "image": "python:3.12-slim",
+    "timeout_ms": 120000,
+    "memory": "1g",
+    "pids_limit": 256
+  }
+}
+```
+
+Docker mode mounts the selected workspace at `/workspace`, applies memory/process limits and disables networking unless `network: true` was explicitly requested and approved. Pick an image containing the toolchain required by the project.
+
+Set the mode to `disabled` to prevent all command execution:
+
+```json
+{"runner": {"mode": "disabled"}}
+```
+
+## Workspace configuration
+
+The important `config.json` fields are:
+
+```json
+{
+  "workspace": {
+    "root": ".",
+    "max_file_bytes": 250000,
+    "exclude": [".git", "node_modules", ".venv", "dist", "build"],
+    "secret_patterns": [".env", ".env.*", "*.pem", "*.key"]
+  },
+  "limits": {
+    "max_output_bytes": 200000
+  },
+  "runner": {
+    "mode": "host",
+    "timeout_ms": 120000
+  }
+}
+```
+
+The bridge stores audit records and recoverable trash outside the workspace:
+
+- Windows: `%LOCALAPPDATA%\ZeroScript-Agent\workspaces\<workspace-id>`;
+- macOS: `~/Library/Application Support/ZeroScript-Agent/workspaces/<workspace-id>`;
+- Linux: `$XDG_STATE_HOME/zeroscript-agent/workspaces/<workspace-id>`.
+
+Patch and file contents are redacted from audit argument records.
+
+## Agent tools
+
+| Tool | Purpose | Approval |
+|---|---|---|
+| `workspace_info` | Workspace and runtime capabilities | No |
+| `list_files` | Bounded directory listing | No |
+| `read_file` | Line-range read plus revision | No |
+| `search_files` | Glob-based file search | No |
+| `search_text` | Literal text search | No |
+| `stat_path` | File/directory metadata | No |
+| `git_status` | Branch and porcelain status | No |
+| `git_diff` | Staged or unstaged diff | No |
+| `apply_patch` | Transactional unified diff | No |
+| `replace_lines` | Revision-checked line replacement | No |
+| `move_path` | Move inside workspace | Every call |
+| `trash_path` | Recoverable removal | Every call |
+| `run_command` | Host or Docker command | Every call |
+
+`apply_patch` does not delete files. Deletion must go through `trash_path`, which is recoverable and requires approval.
+
+## Editing guarantees
+
+- `read_file` returns a SHA-256 revision.
+- `replace_lines` refuses stale revisions.
+- `apply_patch` validates every hunk before writing any file.
+- multi-file patches roll back if a write fails;
+- writes use a temporary file and atomic replacement;
+- UTF-8 BOM and CRLF/LF are preserved for existing files;
+- binary files are rejected by text tools;
+- operation IDs prevent automatic duplicate execution after a retry.
+
+## Development and tests
+
+Run all Python tests:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Run extension smoke tests:
+
+```bash
+node zeroscript-extension/test-workspace-parser.js
+node zeroscript-extension/test-chatgpt.js
+```
+
+Check Python and JavaScript syntax:
+
+```bash
+python -m py_compile agent_bridge.py zeroscript_agent/*.py
+node --check zeroscript-extension/core/workspace-config.js
+node --check zeroscript-extension/core/workspace-parser.js
+node --check zeroscript-extension/core/main.js
+node --check zeroscript-extension/background.js
+```
+
+## Current limitations
+
+- Text tools support UTF-8 files. Other encodings and binary editing are intentionally rejected.
+- Host runner mode is approval-gated but not OS-isolated. Use Docker mode for stronger command isolation.
+- External MCP addon management from the extension is disabled in 2.0 while the workspace security model is stabilized.
+- Browser-site DOM changes can require updates to individual provider adapters.
+
+## License and attribution
+
+GPL-3.0-or-later. This fork retains the license and provider integration work from [ZeroScript Free](https://github.com/sebattfg/ZeroScript-Free).

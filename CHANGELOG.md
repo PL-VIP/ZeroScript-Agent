@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 — Workspace Agent
+
+- Replaced the mandatory Roblox Studio runtime with a user-selected local workspace sandbox.
+- Added safe file listing, bounded reads, file/text search, metadata and read-only Git tools.
+- Added revision-checked line editing and transactional multi-file unified patches.
+- Added recoverable trash and protected moves.
+- Added host and Docker command runners. Every command requires a fresh local approval; tokens are exact, one-time and expire after 60 seconds.
+- Added path traversal, symlink/junction escape, NTFS ADS, secret-file, binary-file and size protections.
+- Added an external audit log with patch/content redaction.
+- Replaced the Roblox/Luau prompt and parser with coding-workspace instructions and raw `###PATCH###` blocks.
+- Updated extension status, onboarding, popup, launchers and documentation for workspace operation.
+- Retained the existing ChatGPT, DeepSeek, Gemini, Kimi, GLM, Qwen, Arena and Meta AI adapters.
+- Added Python workspace/security tests and JavaScript workspace-parser smoke tests.
+
 All notable changes to ZeroScript Free are documented here.
 
 ## [1.5.5] - 2026-09-10

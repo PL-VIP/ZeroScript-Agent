@@ -17,13 +17,13 @@ function render(s) {
   const list = s.servers || [];
   const up = list.filter((x) => x.alive).length;
   const mcpOk = s.connected && (s.mcpAlive || up > 0 || s.tools > 0);
-  const studioOff = mcpOk && s.studio === false; // MCP up but no Studio attached
-  const ok = mcpOk && !studioOff;
+  const workspaceOff = mcpOk && s.workspaceReady === false;
+  const ok = mcpOk && !workspaceOff;
   dot.className = "dot " + (s.connected ? (ok ? "on" : "warn") : "");
   state.textContent = s.connected
-    ? (ok ? "Connected · Roblox Studio ready"
-        : studioOff ? "Studio not connected · enable the MCP server in Studio"
-        : "Bridge OK · open Roblox Studio")
+    ? (ok ? `Connected · ${s.workspaceName || "workspace ready"}`
+        : workspaceOff ? "Selected workspace is unavailable"
+        : "Bridge connected · workspace tools unavailable")
     : "Bridge offline";
   tools.textContent = s.connected ? `${s.tools || 0} tools available` : "Run bridge.py";
   servers.textContent = s.connected
@@ -41,7 +41,7 @@ document.getElementById("reconnect").addEventListener("click", () => {
 document.getElementById("restart").addEventListener("click", (e) => {
   e.target.textContent = "Restarting…";
   chrome.runtime.sendMessage({ type: "restart_mcp" }, () => {
-    e.target.textContent = "⟳ Restart Roblox server";
+    e.target.textContent = "⟳ Refresh workspace bridge";
     setTimeout(refresh, 600);
   });
 });

@@ -1,8 +1,43 @@
 {
-  "mcpServers": {
-    "roblox": {
-      "command": "launch_studio_mcp.py",
-      "args": []
-    }
+  "version": 2,
+  "workspace": {
+    "root": ".",
+    "max_file_bytes": 250000,
+    "exclude": [
+      ".git",
+      ".hg",
+      ".svn",
+      "node_modules",
+      ".venv",
+      "venv",
+      "__pycache__",
+      "dist",
+      "build"
+    ],
+    "secret_patterns": [
+      ".env",
+      ".env.*",
+      "*.pem",
+      "*.key",
+      "id_rsa*",
+      "id_ed25519*",
+      "credentials.json",
+      "service-account*.json",
+      ".npmrc",
+      ".pypirc"
+    ]
+  },
+  "limits": {
+    "max_output_bytes": 200000
+  },
+  "runner": {
+    "mode": "host",
+    "timeout_ms": 120000,
+    "image": "python:3.12-slim",
+    "memory": "1g",
+    "pids_limit": 256
+  },
+  "security": {
+    "allow_missing_origin": true
   }
 }
